@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+.DS_Store
+
+# Scratch output from running stock_scanner.py locally without --out.
+/data/
+
+# The frontend's actual data source IS tracked (deployment reads it
+# directly from the repo/build output) - only ignore stray root-level
+# CSVs, not frontend/public/data/.
+*.csv
+!frontend/public/data/*.csv
+!frontend/public/data/archive/*.csv
