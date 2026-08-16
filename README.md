@@ -4,16 +4,86 @@ Daily scan of stockanalysis.com's screener for small/mid-cap growth
 names, scored and ranked in a React dashboard (adapted from
 `ignition_screener.jsx`).
 
-## Status (2026-08-15)
+## Status (2026-08-16)
+
+Repo home: https://github.com/rplaschke22/stock-tracker
 
 | Phase | Status |
 |---|---|
 | 1. Screener filters (market cap band + sector allowlist) | ✅ Done, verified live |
 | 2. StockTwits chatter layer | 🛑 Blocked — see below |
 | 3. CSV schema | ✅ Done, verified live |
+| 3B. Simulation tab | ⏸️ Waiting on spec — see "2026-08-16 session" below |
+| 3C. Analyst consensus (backend columns) | ✅ Done, verified live (frontend display still pending) |
 | 4. Dashboard → deployable Vite app | ✅ Done, builds and runs locally with real data |
-| 5. Scheduled workflow | ✅ Files written, **not yet pushed to GitHub** |
-| 6. Deployment | ⏳ Not started — needs a real GitHub repo + your account access |
+| 5. Scheduled workflow | ✅ Files written, committed to this repo |
+| 6. Deployment | ⏳ Not started — needs your account access (GitHub Pages toggle or Vercel import) |
+
+### 2026-08-16 session
+
+Picked up as a continuation, asked to point at this GitHub repo and add
+a Simulation tab + analyst consensus display. Findings, in the order
+they came up:
+
+1. **`git clone` of this repo came back completely empty** — no
+   commits, no branches. That contradicted "Phases 1-5 are already
+   built and verified" here specifically. What actually happened: that
+   work was built and verified locally in a prior session, but was
+   never pushed, because that environment had no GitHub credentials
+   (same blocker as Phase 6 below). This session copied that verified
+   local work into this repo and committed it here — see the earlier
+   sections of this README for what Phases 1-5 actually are.
+2. **The two files mentioned as attached (updated `ignition_screener.jsx`
+   and a Phase 3B/3C instructions doc) didn't come through** — nothing
+   new on disk, nothing in the conversation. Phase 3B (the Simulation
+   tab, `simulation-log.json`) needs "the exact schema and rules" from
+   that missing document, so it wasn't built - fabricating a schema
+   would risk building the wrong thing. Still waiting on that content.
+3. **Phase 3C (analyst consensus) was buildable without the missing
+   files** — the three columns and their meaning were specified
+   directly in chat, and it only needed real-site verification, the
+   same way the screener's structure was checked in Phase 1. Done, see
+   below.
+4. **Frontend display of the new analyst columns is not done yet** —
+   that's part of the same `ignition_screener.jsx` update that didn't
+   come through (Step 2), so `App.jsx` still only shows Ignition's
+   technical score. The CSV already has the data; wiring it into the
+   UI is a small, fast follow-up once that file arrives.
+5. **Deployment (Phase 6) is still blocked** on the same thing as
+   before: this environment has no `gh` CLI and no stored GitHub
+   credentials, so nothing could actually be pushed to
+   `rplaschke22/stock-tracker`, and no Pages/Vercel setup could be
+   completed. Everything is committed locally, ready to push - see
+   "What's left" at the bottom.
+
+#### Phase 3C — analyst consensus data (done)
+
+Checked `stockanalysis.com/stocks/{ticker}/forecast/` (there's also a
+near-duplicate `/ratings/` page under the same nav; `/forecast/` was
+used since it has rating, count, and price target together) before
+writing any parsing logic, same as the screener in Phase 1. It renders
+a plain sentence, not a JS-hydrated data blob like the screener:
+
+> "According to 46 analysts polled by S&P Global, Apple stock has a
+> consensus rating of "Buy" and an average price target of $322.28."
+
+Verified against 8 real screener candidates (HTFL, ABCL, NVTS, NN,
+BILL, DOCS, CSQR, XNDU) plus AAPL for a sanity check — stable format
+across mega and small caps.
+
+**What didn't match expectations, flagging same as the screener
+finding in Phase 1**: tickers with no analyst coverage don't get an
+empty-state message on this page — the page **404s entirely**.
+Confirmed against two real tickers from this screener's own candidate
+pool (AUDC, VUZI). `get_analyst_data()` in `stock_scanner.py` treats a
+404 as "no coverage" and returns `None` for all three fields rather
+than raising, so the CSV row just has blank AnalystRating/
+AnalystCount/PriceTarget for those tickers rather than failing the run.
+
+`Ticker, Date, Open, High, Low, Close, Volume, Chatter, AnalystRating,
+AnalystCount, PriceTarget` — verified with a full 40-ticker run,
+2026-08-16 (all 40 happened to have coverage; the 404 path was
+verified separately against AUDC/VUZI).
 
 ## Phase 1 — screener filters
 
@@ -83,10 +153,23 @@ end-to-end. Options when you're back, your call:
 
 `data/latest.csv` (default; the workflow points this at
 `frontend/public/data/latest.csv` — see Phase 5): `Ticker, Date, Open,
-High, Low, Close, Volume, Chatter`, one row per ticker per day,
-`Chatter` repeats the same value across a ticker's rows (snapshot, not
-historical). Verified: 1,191 rows / 40 tickers / exact column match on
-the 2026-08-15 test run.
+High, Low, Close, Volume, Chatter, AnalystRating, AnalystCount,
+PriceTarget` (last three added 2026-08-16, see Phase 3C below), one
+row per ticker per day, `Chatter`/analyst fields repeat the same value
+across a ticker's rows (snapshot, not historical). Verified: 1,191
+rows / 40 tickers / exact column match, re-run 2026-08-16 with the new
+columns.
+
+## Phase 3C — analyst consensus data
+
+See the "2026-08-16 session" writeup near the top of this README for
+the full investigation (real page structure, the 404-on-no-coverage
+edge case, verification tickers). Summary: `get_analyst_data()` in
+`stock_scanner.py` scrapes `stockanalysis.com/stocks/{ticker}/forecast/`
+for consensus rating, analyst count, and average price target, and is
+wired into the daily CSV. **Not yet done**: displaying these fields in
+the dashboard — that's part of the `ignition_screener.jsx` update
+that's still pending (see Phase 3B/3C frontend note above).
 
 ## Phase 4 — dashboard
 
@@ -117,16 +200,17 @@ workflow" button, installs `requirements.txt`, runs
 `python stock_scanner.py --out frontend/public/data/latest.csv`, and
 commits the result back to the repo.
 
-**Files are written but not yet pushed anywhere** — there's no GitHub
-repo for this project yet, and this environment has no `gh` CLI or
-stored GitHub credentials, so repo creation/push needs you. When
-you're back:
+**Committed locally to this repo (`~/stock-tracker` in the dev
+environment) but not pushed** — this environment still has no `gh`
+CLI and no stored GitHub credentials, so it can't authenticate a push
+to `github.com/rplaschke22/stock-tracker` even though the remote now
+exists (confirmed empty via `git clone`, see the top of this README).
+When you're back, from a machine/shell that has your GitHub auth:
 
 ```bash
-cd ~/breakout-scanner
-gh repo create <name> --public --source=. --push
-# or: create an empty repo on github.com, then
-#   git remote add origin <url> && git push -u origin main
+cd ~/stock-tracker   # or wherever you have this repo checked out
+git remote add origin https://github.com/rplaschke22/stock-tracker.git  # if not already set
+git push -u origin main
 ```
 
 Then in the repo's GitHub settings: **Settings → Actions → General →
