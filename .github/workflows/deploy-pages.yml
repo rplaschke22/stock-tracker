@@ -6,13 +6,23 @@ name: Deploy frontend to GitHub Pages
 # integration handles rebuilds on push and this workflow is unused -
 # you can delete it or just leave it disabled.
 #
-# Runs on every push to main (including the daily-scan.yml commit that
-# updates frontend/public/data/latest.csv), so the live site picks up
-# each day's scan automatically, plus workflow_dispatch for manual runs.
+# Runs on every human push to main, PLUS whenever "Daily breakout scan"
+# finishes (via workflow_run below) - NOT plain `push`, because commits
+# made by daily-scan.yml's own `git push` use the default GITHUB_TOKEN,
+# and GitHub deliberately blocks GITHUB_TOKEN-authored pushes from
+# triggering other `on: push` workflows (anti-recursion-loop guard).
+# Without workflow_run, this workflow would only ever redeploy the
+# snapshot from the last *human* push and silently never pick up any
+# day's scan - confirmed happening in practice on 2026-08-17: two
+# successful daily-scan runs, zero redeploys, until this was added.
+# workflow_run isn't subject to that restriction, so it's the fix.
 
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: ["Daily breakout scan"]
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -27,9 +37,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Don't deploy if this run was triggered by a *failed* daily scan -
+    # only skip on an actual failure/cancellation; still deploy for
+    # ordinary pushes (workflow_run fields are unset there) or manual
+    # workflow_dispatch runs.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # For workflow_run, explicitly check out the commit that
+          # finished (rather than relying on main's HEAD at trigger
+          # time) so this can't ever deploy a half-landed state.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
