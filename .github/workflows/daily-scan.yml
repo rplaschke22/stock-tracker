@@ -36,10 +36,20 @@ jobs:
         run: python stock_scanner.py --out frontend/public/data/latest.csv
 
       - name: Commit results
+        # Rebases onto the current remote tip right before pushing, with
+        # a couple of retries. Guards against a plain `git push` getting
+        # rejected as non-fast-forward if main moved between this job's
+        # checkout and this step (e.g. a re-run pinned to an older
+        # commit, or another push landing mid-run) - hit exactly this
+        # on 2026-08-17 testing a re-run against a stale commit.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/public/data/latest.csv frontend/public/data/archive/ 2>/dev/null || true
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "Daily scan: $(date -u +%Y-%m-%d)"
-          git push
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying..." >&2
+            sleep 5
+          done
